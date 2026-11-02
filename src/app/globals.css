@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0805;
+  --bg-card: rgba(26, 22, 18, 0.72);
+  --border-gold: rgba(229, 197, 131, 0.32);
+  --border-gold-active: rgba(240, 205, 130, 0.65);
+  --accent-gold: #e5c583;
+  --accent-gold-light: #f3dc9f;
+  --accent-amber: #d4a04d;
+  --text-primary: #f8f6f0;
+  --text-secondary: #cfc7ba;
+  --text-muted: #8a8275;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #5a4425 transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  background-color: transparent;
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+.font-display {
+  font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #5a4425; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #7a5d35; }
+
+/* ─── Video Background: Guaranteed 100vw x 100vh Full Cover ─── */
+.bg-video-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-image: url('/bg-poster.jpg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.bg-video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+.bg-video-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+/* Subtle gold glow animation */
+@keyframes goldGlow {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+.animate-gold-glow {
+  animation: goldGlow 3s infinite ease-in-out;
+}
+
+/* Glass card styling matching the cathedral aesthetic */
+.glass-editor-card {
+  background: rgba(18, 14, 10, 0.76);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(229, 197, 131, 0.38);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(229, 197, 131, 0.22);
+}
+
+/* Diamond divider */
+.diamond-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.diamond-divider::before,
+.diamond-divider::after {
+  content: '';
+  height: 1px;
+  width: 50px;
+  background: linear-gradient(90deg, transparent, rgba(229, 197, 131, 0.4), transparent);
+}
+
+/* Golden Improve Text Button */
+.btn-improve-gold {
+  background: linear-gradient(135deg, #e5c583 0%, #d4a04d 100%);
+  color: #1a1205;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(229, 197, 131, 0.45);
+  transition: all 0.2s ease;
+}
+.btn-improve-gold:hover {
+  background: linear-gradient(135deg, #f0d499 0%, #e0ad58 100%);
+  box-shadow: 0 6px 26px rgba(229, 197, 131, 0.6);
+  transform: translateY(-1px);
+}
