@@ -78,26 +78,65 @@ typeassist/
 ### Prerequisites
 - **Node.js** v18+ (tested on v24.20.0)
 - **npm** (comes with Node.js)
+- *(Optional)* **Emscripten SDK** (only needed if you modify C code and want to recompile WebAssembly; precompiled `.wasm` binaries are already included in `public/wasm/`)
 
 ### Installation & Launch
 ```bash
-# 1. Clone or navigate to the directory
-cd typeassist
+# 1. Clone the repository
+git clone https://github.com/low-key-jake/TypeAssist.git
+cd TypeAssist
 
 # 2. Install dependencies
 npm install
 
-# 3. Start development server
+# 3. (Optional) Set up AI API Key for Tone Shifter / Sentence Doctor
+# Copy .env.example or set in .env.local:
+# GEMINI_API_KEY=your_key_here
+
+# 4. Start the application
 npm run dev
 ```
 
 Open [http://localhost:3001](http://localhost:3001) in your browser.
 
+> **Note on WebAssembly:** The repository includes precompiled `public/wasm/typeassist.js` and `public/wasm/typeassist.wasm`. If WebAssembly is loaded, the engine badge shows `C Engine (WebAssembly)`. If WASM is unavailable in a browser environment, TypeAssist automatically and gracefully switches to `TypeScript Fallback`.
+
 ---
 
 ## 5. Compiling C Engine (Native & WebAssembly)
 
-### Running Native C Unit Tests (with gcc/clang)
+### Recompiling to WebAssembly (Emscripten)
+If you modify the C engine in `engine/src/`:
+1. Install and activate [emsdk](https://github.com/emscripten-core/emsdk):
+   ```bash
+   git clone https://github.com/emscripten-core/emsdk.git
+   cd emsdk
+   ./emsdk install latest
+   ./emsdk activate latest
+   # On Windows: emsdk_env.bat
+   # On Linux/macOS: source ./emsdk_env.sh
+   ```
+2. Run the build command:
+   ```bash
+   npm run build:wasm
+   # or on Windows:
+   engine\build_wasm.bat
+   # or on Linux/macOS:
+   cd engine && make wasm
+   ```
+This updates `public/wasm/typeassist.js` and `public/wasm/typeassist.wasm`.
+
+### Running Tests & Benchmarks
+```bash
+# Test WASM compilation and all 7 C data structures in Node:
+node engine/tests/test_wasm.js
+node engine/tests/benchmark_wasm.js
+
+# Or compile and run native C unit tests (with gcc/clang):
+cd engine
+make test
+make benchmark
+```
 ```bash
 cd engine
 make test

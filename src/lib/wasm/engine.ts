@@ -1,10 +1,12 @@
 /**
- * TypeAssist — C/WebAssembly Engine Bridge & Data Structure Runtime
+ * TypeAssist — C/WebAssembly Engine Bridge & Fallback Runtime
  *
- * Implements the official TypeScript interface for the C Engine.
- * Loads the WebAssembly binary when compiled; provides an algorithmic
- * exact twin of the 7 C data structures if running in local preview mode
- * before emcc compilation.
+ * Provides a production-grade WebAssembly bridge connecting Next.js to the
+ * native C data structures (Trie, HashTable, Min-Heap, Damerau-Levenshtein,
+ * N-Gram Model, Stack, Linked List).
+ *
+ * If WebAssembly fails to load, gracefully falls back to the verified TypeScript
+ * implementation without interrupting user workflows.
  */
 
 import {
@@ -18,10 +20,9 @@ import {
 } from './types';
 
 // ============================================================================
-// Algorithmic Data Structures (Faithful to C implementations)
+// TypeScript Fallback Algorithms (Faithful algorithmic twins to engine/src/*.c)
 // ============================================================================
 
-// 1. Damerau-Levenshtein Distance (Matches engine/src/edit_distance.c)
 function damerauLevenshtein(s1: string, s2: string): number {
   const m = s1.length;
   const n = s2.length;
@@ -57,7 +58,6 @@ function damerauLevenshtein(s1: string, s2: string): number {
   return d[m][n];
 }
 
-// 2. Binary Min-Heap (Matches engine/src/minheap.c)
 interface HeapElement {
   word: string;
   distance: number;
@@ -125,212 +125,304 @@ class MinHeap {
   }
 }
 
-// 3. Trie (Matches engine/src/trie.c)
-class TrieNode {
-  children: Map<string, TrieNode> = new Map();
-  isEndOfWord: boolean = false;
-  frequency: number = 0;
+interface TrieNode {
+  children: Map<string, TrieNode>;
+  isEndOfWord: boolean;
+  frequency: number;
 }
 
 class Trie {
-  root: TrieNode = new TrieNode();
-  wordCount: number = 0;
-  nodeCount: number = 1;
+  private root: TrieNode = { children: new Map(), isEndOfWord: false, frequency: 0 };
+  public nodeCount: number = 1;
 
   insert(word: string, frequency: number = 1): void {
     let curr = this.root;
-    const cleanWord = word.trim().toLowerCase();
-    if (!cleanWord) return;
-
-    for (const char of cleanWord) {
+    for (const char of word.toLowerCase()) {
       if (!curr.children.has(char)) {
-        curr.children.set(char, new TrieNode());
+        curr.children.set(char, { children: new Map(), isEndOfWord: false, frequency: 0 });
         this.nodeCount++;
       }
       curr = curr.children.get(char)!;
     }
-
-    if (!curr.isEndOfWord) {
-      this.wordCount++;
-      curr.isEndOfWord = true;
-    }
+    curr.isEndOfWord = true;
     curr.frequency = Math.max(curr.frequency, frequency);
   }
 
-  autocomplete(prefix: string, maxResults: number = 10): TrieSuggestion[] {
-    const results: TrieSuggestion[] = [];
-    const cleanPrefix = prefix.trim().toLowerCase();
-    if (!cleanPrefix) return results;
-
+  autocomplete(prefix: string, maxResults: number = 5): TrieSuggestion[] {
     let curr = this.root;
-    for (const char of cleanPrefix) {
-      if (!curr.children.has(char)) return results;
+    for (const char of prefix.toLowerCase()) {
+      if (!curr.children.has(char)) return [];
       curr = curr.children.get(char)!;
     }
 
-    // DFS to collect all words under this prefix
-    const dfs = (node: TrieNode, path: string) => {
-      if (node.isEndOfWord) {
-        results.push({ word: path, frequency: node.frequency });
-      }
-      for (const [char, child] of node.children.entries()) {
-        dfs(child, path + char);
-      }
-    };
+    const results: TrieSuggestion[] = [];
+    this.collectWords(curr, prefix.toLowerCase(), results);
+    return results.sort((a, b) => b.frequency - a.frequency).slice(0, maxResults);
+  }
 
-    dfs(curr, cleanPrefix);
-    results.sort((a, b) => b.frequency - a.frequency);
-    return results.slice(0, maxResults);
+  private collectWords(node: TrieNode, currentWord: string, results: TrieSuggestion[]): void {
+    if (node.isEndOfWord) {
+      results.push({ word: currentWord, frequency: node.frequency });
+    }
+    for (const [char, child] of node.children.entries()) {
+      this.collectWords(child, currentWord + char, results);
+    }
   }
 }
 
-// 4. Hash Table with DJB2 Hashing (Matches engine/src/hashtable.c)
 class HashTable {
-  private buckets: Map<string, number> = new Map();
+  private map: Map<string, number> = new Map();
 
   insert(key: string, value: number): void {
-    this.buckets.set(key.toLowerCase().trim(), value);
+    this.map.set(key.toLowerCase(), value);
   }
 
   contains(key: string): boolean {
-    return this.buckets.has(key.toLowerCase().trim());
+    return this.map.has(key.toLowerCase());
   }
 
   get(key: string): number | undefined {
-    return this.buckets.get(key.toLowerCase().trim());
+    return this.map.get(key.toLowerCase());
   }
 
   remove(key: string): boolean {
-    return this.buckets.delete(key.toLowerCase().trim());
+    return this.map.delete(key.toLowerCase());
   }
 
   size(): number {
-    return this.buckets.size;
+    return this.map.size;
   }
 
   keys(): IterableIterator<string> {
-    return this.buckets.keys();
+    return this.map.keys();
   }
 }
 
-// 5. Stack (Matches engine/src/stack.c)
 class UndoStack {
-  private stack: { text: string; timestamp: number }[] = [];
+  private items: { text: string; timestamp: number }[] = [];
+  private readonly maxDepth: number = 50;
 
   push(text: string): void {
-    this.stack.push({ text, timestamp: Date.now() });
-    if (this.stack.length > 50) this.stack.shift();
+    this.items.push({ text, timestamp: Date.now() });
+    if (this.items.length > this.maxDepth) {
+      this.items.shift();
+    }
   }
 
   pop(): { text: string; timestamp: number } | null {
-    return this.stack.pop() || null;
+    return this.items.pop() || null;
   }
 
   size(): number {
-    return this.stack.length;
+    return this.items.length;
   }
 }
 
-// 6. Singly Linked List (Matches engine/src/linkedlist.c)
-interface ListNode {
-  entry: HistoryEntry;
-  next: ListNode | null;
-}
-
 class HistoryLinkedList {
-  private head: ListNode | null = null;
-  private count: number = 0;
-  private maxEntries: number = 50;
+  private entries: HistoryEntry[] = [];
+  private readonly maxEntries: number = 200;
 
   add(original: string, modified: string, type: HistoryType): void {
-    const node: ListNode = {
-      entry: { original, modified, type, timestamp: Date.now() },
-      next: this.head,
-    };
-    this.head = node;
-    this.count++;
-
-    // Evict tail if over max
-    if (this.count > this.maxEntries) {
-      let curr = this.head;
-      for (let i = 0; i < this.maxEntries - 1 && curr && curr.next; i++) {
-        curr = curr.next;
-      }
-      if (curr) curr.next = null;
-      this.count = this.maxEntries;
+    this.entries.unshift({
+      original,
+      modified,
+      type,
+      timestamp: Date.now(),
+    });
+    if (this.entries.length > this.maxEntries) {
+      this.entries.pop();
     }
   }
 
   toArray(): HistoryEntry[] {
-    const list: HistoryEntry[] = [];
-    let curr = this.head;
-    while (curr) {
-      list.push(curr.entry);
-      curr = curr.next;
-    }
-    return list;
+    return [...this.entries];
   }
 
   clear(): void {
-    this.head = null;
-    this.count = 0;
+    this.entries = [];
   }
 
   size(): number {
-    return this.count;
+    return this.entries.length;
   }
 }
 
 // ============================================================================
-// Unified TypeAssist Engine Bridge
+// TypeAssist Unified Engine Bridge
 // ============================================================================
 
-class TypeAssistEngine implements TypeAssistEngineInterface {
+export class TypeAssistEngine implements TypeAssistEngineInterface {
+  // WebAssembly state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private wasmModule: any = null;
+  private isWasmLoaded: boolean = false;
+  private activeEngine: 'wasm' | 'fallback' = 'fallback';
+  private initPromise: Promise<boolean> | null = null;
+  private initialized: boolean = false;
+
+  // TypeScript Fallback state
   private trie: Trie = new Trie();
   private dictHt: HashTable = new HashTable();
   private personalTrie: Trie = new Trie();
   private personalHt: HashTable = new HashTable();
-
   private unigrams: HashTable = new HashTable();
   private bigrams: HashTable = new HashTable();
   private trigrams: HashTable = new HashTable();
-
   private undoStack: UndoStack = new UndoStack();
   private historyList: HistoryLinkedList = new HistoryLinkedList();
 
-  private initialized: boolean = false;
-  private wasmModule: unknown = null;
-  private isWasmLoaded: boolean = false;
+  // Raw Corpora Cache
+  private rawDictContent: string = '';
+  private rawBigramContent: string = '';
+  private rawTrigramContent: string = '';
 
   async init(): Promise<boolean> {
     if (this.initialized) return true;
+    if (this.initPromise) return this.initPromise;
 
-    try {
-      // 1. Try loading WebAssembly if pre-compiled
-      if (typeof window !== 'undefined') {
-        try {
-          const wasmScript = await fetch('/wasm/typeassist.js');
-          if (wasmScript.ok) {
-            // WASM module exists and is accessible
-            console.info('[TypeAssist] WebAssembly module detected.');
-          }
-        } catch {
-          // Fall back gracefully to internal DS engine
+    this.initPromise = (async () => {
+      try {
+        // 1. Fetch text data files
+        await this.loadCorpora();
+
+        // 2. Try loading and instantiating WebAssembly
+        const wasmSuccess = await this.tryLoadWasm();
+        if (wasmSuccess) {
+          this.isWasmLoaded = true;
+          this.activeEngine = 'wasm';
+          console.info('[TypeAssist] WebAssembly C Engine initialized successfully (7 Data Structures Active).');
+        } else {
+          this.isWasmLoaded = false;
+          this.activeEngine = 'fallback';
+          console.warn('[TypeAssist] Running in TypeScript Fallback mode.');
         }
+
+        this.initialized = true;
+        return true;
+      } catch (err) {
+        console.error('[TypeAssist] Engine initialization error:', err);
+        this.seedFallbackCorpus();
+        this.isWasmLoaded = false;
+        this.activeEngine = 'fallback';
+        this.initialized = true;
+        return true;
+      }
+    })();
+
+    return this.initPromise;
+  }
+
+  private async tryLoadWasm(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      // In Node environment (e.g. tests or SSR)
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const createModule = require('../../../public/wasm/typeassist.js');
+        if (typeof createModule === 'function') {
+          this.wasmModule = await createModule();
+          return this.initWasmEngineState();
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    }
+
+    // In Browser environment
+    try {
+      // Check if script already injected
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(window as any).createTypeAssistModule) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = '/wasm/typeassist.js';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = (e) => reject(e);
+          document.head.appendChild(script);
+        });
       }
 
-      // 2. Load dictionary & N-gram data
-      await this.loadCorpora();
-      this.initialized = true;
-      return true;
-    } catch (err) {
-      console.error('[TypeAssist] Engine initialization error:', err);
-      // Ensure engine initializes even if external network fetch fails
-      this.seedFallbackCorpus();
-      this.initialized = true;
-      return true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const createModule = (window as any).createTypeAssistModule;
+      if (typeof createModule === 'function') {
+        this.wasmModule = await createModule({
+          locateFile: (path: string) => `/wasm/${path}`,
+        });
+        return this.initWasmEngineState();
+      }
+    } catch (e) {
+      console.warn('[TypeAssist] Failed to initialize WebAssembly module:', e);
+      return false;
+    }
+
+    return false;
+  }
+
+  private initWasmEngineState(): boolean {
+    if (!this.wasmModule || typeof this.wasmModule._engine_init !== 'function') {
+      return false;
+    }
+
+    const status = this.wasmModule._engine_init();
+    if (status !== 0) {
+      console.error('[TypeAssist WASM] _engine_init returned non-zero code:', status);
+      return false;
+    }
+
+    // Bulk load dictionary into C Engine
+    if (this.rawDictContent) {
+      this.withWasmString(this.rawDictContent, (ptr, len) => {
+        const loaded = this.wasmModule._engine_load_dictionary(ptr, len);
+        console.info(`[TypeAssist WASM] Loaded ${loaded} words into C Trie & HashTable.`);
+      });
+    }
+
+    // Bulk load N-grams into C Engine
+    if (this.rawBigramContent) {
+      this.withWasmString(this.rawBigramContent, (ptr, len) => {
+        this.wasmModule._engine_load_ngrams(ptr, len, 2);
+      });
+    }
+
+    if (this.rawTrigramContent) {
+      this.withWasmString(this.rawTrigramContent, (ptr, len) => {
+        this.wasmModule._engine_load_ngrams(ptr, len, 3);
+      });
+    }
+
+    return true;
+  }
+
+  /* ─── WASM String Memory Helpers ─── */
+
+  private withWasmString<T>(str: string, fn: (ptr: number, len: number) => T): T {
+    if (!this.wasmModule) throw new Error('WASM module not loaded');
+    const len = this.wasmModule.lengthBytesUTF8(str) + 1;
+    const ptr = this.wasmModule._malloc(len);
+    this.wasmModule.stringToUTF8(str, ptr, len);
+    try {
+      return fn(ptr, len);
+    } finally {
+      this.wasmModule._free(ptr);
     }
   }
+
+  private readAndFreeJson<T>(ptr: number, defaultValue: T): T {
+    if (!ptr || !this.wasmModule) return defaultValue;
+    try {
+      const str = this.wasmModule.UTF8ToString(ptr);
+      if (!str) return defaultValue;
+      return JSON.parse(str) as T;
+    } catch (err) {
+      console.error('[TypeAssist WASM] Failed to parse JSON from C Engine:', err);
+      return defaultValue;
+    } finally {
+      this.wasmModule._engine_free_string(ptr);
+    }
+  }
+
+  /* ─── Corpora Loading ─── */
 
   private async loadCorpora(): Promise<void> {
     try {
@@ -340,9 +432,14 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
         fetch('/data/trigrams.txt').then((r) => r.text()).catch(() => ''),
       ]);
 
-      if (dictRes) this.parseDictionary(dictRes);
-      if (biRes) this.parseBigrams(biRes);
-      if (triRes) this.parseTrigrams(triRes);
+      this.rawDictContent = dictRes || '';
+      this.rawBigramContent = biRes || '';
+      this.rawTrigramContent = triRes || '';
+
+      // Also parse into fallback structures for seamless redundancy
+      if (this.rawDictContent) this.parseDictionaryFallback(this.rawDictContent);
+      if (this.rawBigramContent) this.parseBigramsFallback(this.rawBigramContent);
+      if (this.rawTrigramContent) this.parseTrigramsFallback(this.rawTrigramContent);
 
       if (this.dictHt.size() === 0) {
         this.seedFallbackCorpus();
@@ -352,7 +449,7 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
     }
   }
 
-  private parseDictionary(content: string): void {
+  private parseDictionaryFallback(content: string): void {
     const lines = content.split('\n');
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
@@ -366,24 +463,24 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
     }
   }
 
-  private parseBigrams(content: string): void {
+  private parseBigramsFallback(content: string): void {
     const lines = content.split('\n');
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
-      if (parts.length >= 2 && parts[0]) {
+      if (parts.length >= 2) {
         const freq = parseInt(parts[1], 10) || 1;
-        this.bigrams.insert(parts[0], freq);
+        this.bigrams.insert(parts[0].toLowerCase(), freq);
       }
     }
   }
 
-  private parseTrigrams(content: string): void {
+  private parseTrigramsFallback(content: string): void {
     const lines = content.split('\n');
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
-      if (parts.length >= 2 && parts[0]) {
+      if (parts.length >= 2) {
         const freq = parseInt(parts[1], 10) || 1;
-        this.trigrams.insert(parts[0], freq);
+        this.trigrams.insert(parts[0].toLowerCase(), freq);
       }
     }
   }
@@ -406,49 +503,76 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
     }
   }
 
+  /* ─── Public Engine API ─── */
+
   isReady(): boolean {
     return this.initialized;
   }
 
-  autocomplete(prefix: string, maxResults: number = 6): TrieSuggestion[] {
-    if (!prefix.trim()) return [];
-    const personal = this.personalTrie.autocomplete(prefix, maxResults);
-    const standard = this.trie.autocomplete(prefix, maxResults);
+  getActiveEngine(): 'wasm' | 'fallback' {
+    return this.activeEngine;
+  }
 
+  getEngineLabel(): string {
+    return this.activeEngine === 'wasm'
+      ? 'C Engine (WebAssembly)'
+      : 'TypeScript Fallback';
+  }
+
+  /**
+   * 1. Autocomplete via C Trie (or TypeScript Trie Fallback)
+   */
+  autocomplete(prefix: string, maxResults: number = 6): TrieSuggestion[] {
+    const cleanPrefix = prefix.trim().toLowerCase();
+    if (!cleanPrefix) return [];
+
+    if (this.isWasmLoaded && this.wasmModule) {
+      return this.withWasmString(cleanPrefix, (ptr) => {
+        const resPtr = this.wasmModule._engine_autocomplete(ptr, maxResults);
+        return this.readAndFreeJson<TrieSuggestion[]>(resPtr, []);
+      });
+    }
+
+    // Fallback: TypeScript Trie
+    const personal = this.personalTrie.autocomplete(cleanPrefix, maxResults);
+    const standard = this.trie.autocomplete(cleanPrefix, maxResults);
     const map = new Map<string, number>();
-    for (const p of personal) map.set(p.word, p.frequency + 10000); // boost personal words
+    for (const p of personal) map.set(p.word, p.frequency + 10000);
     for (const s of standard) {
       if (!map.has(s.word)) map.set(s.word, s.frequency);
     }
-
     return Array.from(map.entries())
       .map(([word, frequency]) => ({ word, frequency }))
       .sort((a, b) => b.frequency - a.frequency)
       .slice(0, maxResults);
   }
 
+  /**
+   * 2. Spellcheck via C Damerau-Levenshtein + Min-Heap (or TypeScript Fallback)
+   */
   spellcheck(word: string, maxResults: number = 5): SpellCheckResult {
     const clean = word.trim().toLowerCase();
     if (!clean) return { correct: true, suggestions: [] };
 
-    // 1. Direct O(1) verification in Hash Tables
+    if (this.isWasmLoaded && this.wasmModule) {
+      return this.withWasmString(clean, (ptr) => {
+        const resPtr = this.wasmModule._engine_spellcheck(ptr, maxResults);
+        return this.readAndFreeJson<SpellCheckResult>(resPtr, { correct: true, suggestions: [] });
+      });
+    }
+
+    // Fallback: TypeScript Damerau-Levenshtein + MinHeap
     if (this.dictHt.contains(clean) || this.personalHt.contains(clean)) {
       return { correct: true, suggestions: [] };
     }
 
-    // 2. Candidate evaluation using Min-Heap & Damerau-Levenshtein
     const heap = new MinHeap();
-    const evaluated = new Set<string>();
-
     for (const dictWord of this.dictHt.keys()) {
-      // Optimization: filter out words with length delta > 2
       if (Math.abs(dictWord.length - clean.length) > 2) continue;
-
       const dist = damerauLevenshtein(clean, dictWord);
       if (dist <= 2) {
         const freq = this.dictHt.get(dictWord) || 1;
         heap.insert(dictWord, dist, freq);
-        evaluated.add(dictWord);
       }
     }
 
@@ -458,24 +582,30 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
       if (min) suggestions.push(min);
     }
 
-    return {
-      correct: false,
-      suggestions,
-    };
+    return { correct: false, suggestions };
   }
 
+  /**
+   * 3. Next-Word Prediction via C N-Gram Model (or TypeScript Fallback)
+   */
   predictNext(context: string, maxResults: number = 4): NGramPrediction[] {
-    const tokens = context
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+    const cleanCtx = context.trim().toLowerCase();
+    if (!cleanCtx) return [];
+
+    if (this.isWasmLoaded && this.wasmModule) {
+      return this.withWasmString(cleanCtx, (ptr) => {
+        const resPtr = this.wasmModule._engine_predict_next(ptr, maxResults);
+        return this.readAndFreeJson<NGramPrediction[]>(resPtr, []);
+      });
+    }
+
+    // Fallback: TypeScript N-Gram Model
+    const tokens = cleanCtx.split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return [];
 
     const predictions: NGramPrediction[] = [];
     const seen = new Set<string>();
 
-    // 1. Trigram attempt (last 2 words)
     if (tokens.length >= 2) {
       const w1 = tokens[tokens.length - 2];
       const w2 = tokens[tokens.length - 1];
@@ -491,7 +621,6 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
       }
     }
 
-    // 2. Bigram fallback (last word)
     if (tokens.length >= 1 && predictions.length < maxResults) {
       const w1 = tokens[tokens.length - 1];
       const prefix = `${w1}|`;
@@ -508,51 +637,143 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
       }
     }
 
-    // Sort predictions by confidence
     predictions.sort((a, b) => b.score - a.score);
     return predictions.slice(0, maxResults);
   }
 
+  /**
+   * 4. Word Existence Lookup via C Hash Table
+   */
   wordExists(word: string): boolean {
-    return this.dictHt.contains(word) || this.personalHt.contains(word);
+    const clean = word.trim().toLowerCase();
+    if (!clean) return false;
+
+    if (this.isWasmLoaded && this.wasmModule) {
+      return this.withWasmString(clean, (ptr) => {
+        return this.wasmModule._engine_word_exists(ptr) === 1;
+      });
+    }
+
+    return this.dictHt.contains(clean) || this.personalHt.contains(clean);
   }
 
+  /**
+   * 5. Personal Dictionary Addition via C Engine
+   */
   addWord(word: string): boolean {
     const clean = word.trim().toLowerCase();
     if (!clean) return false;
+
+    if (this.isWasmLoaded && this.wasmModule) {
+      this.withWasmString(clean, (ptr) => {
+        this.wasmModule._engine_add_word(ptr);
+      });
+    }
+
     this.personalTrie.insert(clean, 5000);
     this.personalHt.insert(clean, 5000);
     return true;
   }
 
+  /**
+   * 6. Personal Dictionary Removal via C Engine
+   */
   removeWord(word: string): boolean {
     const clean = word.trim().toLowerCase();
+    if (!clean) return false;
+
+    if (this.isWasmLoaded && this.wasmModule) {
+      this.withWasmString(clean, (ptr) => {
+        this.wasmModule._engine_remove_word(ptr);
+      });
+    }
+
     return this.personalHt.remove(clean);
   }
 
+  /**
+   * 7. Undo via C LIFO Stack
+   */
   pushUndo(text: string): boolean {
+    if (this.isWasmLoaded && this.wasmModule) {
+      this.withWasmString(text, (ptr) => {
+        this.wasmModule._engine_push_undo(ptr);
+      });
+    }
+
     this.undoStack.push(text);
     return true;
   }
 
   undo(): { text: string; timestamp: number } | null {
+    if (this.isWasmLoaded && this.wasmModule) {
+      const resPtr = this.wasmModule._engine_undo();
+      if (resPtr) {
+        return this.readAndFreeJson<{ text: string; timestamp: number } | null>(resPtr, null);
+      }
+      return null;
+    }
+
     return this.undoStack.pop();
   }
 
+  /**
+   * 8. History Audit via C Linked List
+   */
   addHistory(original: string, modified: string, type: HistoryType): boolean {
+    if (this.isWasmLoaded && this.wasmModule) {
+      this.withWasmString(original, (origPtr) => {
+        this.withWasmString(modified, (modPtr) => {
+          this.wasmModule._engine_add_history(origPtr, modPtr, type);
+        });
+      });
+    }
+
     this.historyList.add(original, modified, type);
     return true;
   }
 
   getHistory(): HistoryEntry[] {
+    if (this.isWasmLoaded && this.wasmModule) {
+      const resPtr = this.wasmModule._engine_get_history();
+      return this.readAndFreeJson<HistoryEntry[]>(resPtr, []);
+    }
+
     return this.historyList.toArray();
   }
 
   clearHistory(): void {
+    if (this.isWasmLoaded && this.wasmModule) {
+      this.wasmModule._engine_clear_history();
+    }
     this.historyList.clear();
   }
 
+  /**
+   * 9. Engine Statistics via C Engine
+   */
   getStats(): EngineStats {
+    if (this.isWasmLoaded && this.wasmModule) {
+      const resPtr = this.wasmModule._engine_get_stats();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = this.readAndFreeJson<any>(resPtr, null);
+      if (raw) {
+        return {
+          dict_words: raw.dict_words || 0,
+          trie_nodes: raw.trie_nodes || 0,
+          personal_words: raw.personal_words || 0,
+          unigram_count: raw.unigram_entries || 0,
+          history_entries: raw.history_entries || 0,
+          undo_stack_size: raw.undo_depth || 0,
+          trieWordCount: raw.dict_words || 0,
+          hashTableEntries: raw.dict_words || 0,
+          bigramCount: raw.bigram_entries || 0,
+          trigramCount: raw.trigram_entries || 0,
+          activeEngine: 'C Engine (WebAssembly)',
+        };
+      }
+    }
+
     return {
       dict_words: this.dictHt.size(),
       trie_nodes: this.trie.nodeCount,
@@ -560,6 +781,11 @@ class TypeAssistEngine implements TypeAssistEngineInterface {
       unigram_count: this.unigrams.size(),
       history_entries: this.historyList.size(),
       undo_stack_size: this.undoStack.size(),
+      trieWordCount: this.dictHt.size(),
+      hashTableEntries: this.dictHt.size(),
+      bigramCount: this.bigrams.size(),
+      trigramCount: this.trigrams.size(),
+      activeEngine: 'TypeScript Fallback',
     };
   }
 }

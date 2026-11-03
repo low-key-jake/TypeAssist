@@ -305,7 +305,7 @@ int trie_load_from_buffer(Trie *trie, const char *data, int data_len)
         int  tab_pos = -1;
 
         for (int i = 0; i < line_len; i++) {
-            if (data[line_start + i] == '\t') {
+            if (data[line_start + i] == '\t' || data[line_start + i] == ' ') {
                 tab_pos = i;
                 break;
             }

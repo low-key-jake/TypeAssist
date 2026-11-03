@@ -46,11 +46,18 @@ export interface EngineStats {
   unigram_count: number;
   history_entries: number;
   undo_stack_size: number;
+  trieWordCount?: number;
+  hashTableEntries?: number;
+  bigramCount?: number;
+  trigramCount?: number;
+  activeEngine?: string;
 }
 
 export interface TypeAssistEngineInterface {
   init(): Promise<boolean>;
   isReady(): boolean;
+  getActiveEngine(): 'wasm' | 'fallback';
+  getEngineLabel(): string;
   autocomplete(prefix: string, maxResults?: number): TrieSuggestion[];
   spellcheck(word: string, maxResults?: number): SpellCheckResult;
   predictNext(context: string, maxResults?: number): NGramPrediction[];
@@ -64,4 +71,3 @@ export interface TypeAssistEngineInterface {
   clearHistory(): void;
   getStats(): EngineStats | null;
 }
-

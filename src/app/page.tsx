@@ -48,6 +48,8 @@ export default function HomePage() {
     undoLastEdit,
     logHistoryEvent,
     stats,
+    activeEngine,
+    engineLabel,
   } = useEngine();
 
   /* ─── State ─── */
@@ -387,10 +389,10 @@ export default function HomePage() {
             <button
               onClick={() => setShowDsaModal(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/45 border border-amber-400/30 text-xs font-medium text-[#e5c583] hover:bg-black/60 transition-all backdrop-blur-md shadow-sm"
-              title="Inspect C Data Structures (DSA Matrix)"
+              title={`Active Engine: ${engineLabel}`}
             >
               <Cpu className="w-3.5 h-3.5 text-[#e5c583]" />
-              <span>C Engine DSA</span>
+              <span>{activeEngine === 'wasm' ? 'C Engine (WASM)' : 'TS Fallback'}</span>
             </button>
 
             {/* Dark/Light mode pill */}
@@ -677,7 +679,7 @@ export default function HomePage() {
             >
               <Cpu className="w-3 h-3 text-[#e5c583]" />
               <span>C-Core: Trie • Min-Heap • Damerau-Levenshtein • Hash Table • N-Grams</span>
-              <span className="text-[9px] bg-amber-500/30 px-1.5 py-0.2 rounded text-amber-200 font-mono">View DSA</span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${activeEngine === 'wasm' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>{engineLabel}</span>
             </button>
           </div>
         </main>
@@ -695,8 +697,13 @@ export default function HomePage() {
               <div className="flex items-center gap-2.5">
                 <Cpu className="w-6 h-6 text-[#e5c583]" />
                 <div>
-                  <h3 className="text-lg font-bold text-white">C Engine Data Structures Matrix</h3>
-                  <p className="text-xs text-white/50">Core implementation verified in engine/src/*.c</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-white">C Engine Data Structures Matrix</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium ${activeEngine === 'wasm' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
+                      {engineLabel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50">Core algorithms compiled from engine/src/*.c via WebAssembly</p>
                 </div>
               </div>
               <button

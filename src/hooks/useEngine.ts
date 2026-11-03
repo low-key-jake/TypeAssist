@@ -135,6 +135,8 @@ export function useEngine() {
     stats,
     history,
     personalWords,
+    activeEngine: engine.getActiveEngine(),
+    engineLabel: engine.getEngineLabel(),
     getAutocomplete,
     checkSpelling,
     predictNextWords,

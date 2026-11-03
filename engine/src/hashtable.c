@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_MSC_VER) && !defined(strdup)
+#define strdup _strdup
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                    */
 /* ------------------------------------------------------------------ */
@@ -43,7 +47,7 @@ static HTEntry *entry_create(const char *key, int value)
     HTEntry *entry = (HTEntry *)malloc(sizeof(HTEntry));
     if (!entry) return NULL;
 
-    entry->key = _strdup(key);
+    entry->key = strdup(key);
     if (!entry->key) {
         free(entry);
         return NULL;
@@ -267,10 +271,10 @@ int ht_load_from_buffer(HashTable *ht, const char *data, int data_len)
 
         if (line_len == 0) continue;
 
-        /* Find the tab separator. */
+        /* Find the tab or space separator. */
         int tab_pos = -1;
         for (int i = 0; i < line_len; i++) {
-            if (data[line_start + i] == '\t') {
+            if (data[line_start + i] == '\t' || data[line_start + i] == ' ') {
                 tab_pos = i;
                 break;
             }
